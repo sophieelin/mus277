@@ -1,83 +1,118 @@
-import os
 import numpy as np
 import sounddevice as sd
-import wave
-from threading import Thread, Event
+import soundfile as sf
+import numpy as np
 
 
-class AudioMixer:
-    def __init__(self):
-        self.stems = {}
-        self.playback_event = Event()
-        self.mute_states = {}
-        self.sample_rate = 44100
+class SimultaneousWAVPlayer:
+    def __init__(self, file1, file2):
+        """
+        wav player obj
+        """
 
-    def load_stem(self, name, filepath):
-        if not os.path.isfile(filepath):
-            raise FileNotFoundError(f"File {filepath} not found")
-        with wave.open(filepath, "rb") as wf:
-            print(self.sample_rate)
-            if wf.getframerate() != self.sample_rate:
-                raise ValueError(f"Unsupported sample rate: {wf.getframerate()}")
-            audio_data = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16)
-            self.stems[name] = audio_data
-            self.mute_states[name] = False
+        self.data1, self.samplerate1 = sf.read(file1)
+        self.data2, self.samplerate2 = sf.read(file2)
 
-    def mute_stem(self, name, mute=True):
-        if name not in self.stems:
-            raise ValueError(f"Stem {name} not loaded")
-        self.mute_states[name] = mute
+        if self.samplerate1 != self.samplerate2:
+            raise ValueError("mismatched sample rates")
 
-    def _mix_stems(self):
-        if not self.stems:
-            return np.zeros((self.sample_rate,), dtype=np.int16)
-        min_length = min(len(data) for data in self.stems.values())
-        mixed = np.zeros(min_length, dtype=np.float32)
-        for name, data in self.stems.items():
-            if not self.mute_states[name]:
-                mixed[:min_length] += data[:min_length].astype(np.float32)
-        mixed = np.clip(mixed, -32768, 32767).astype(np.int16)
-        return mixed
+        self.mute1 = False
+        self.mute2 = False
+
+        if self.data1.ndim == 1:
+            self.data1 = np.column_stack((self.data1, self.data1))
+        if self.data2.ndim == 1:
+            self.data2 = np.column_stack((self.data2, self.data2))
+
+        self.max_length = min(len(self.data1), len(self.data2))
+        self.data1 = self.data1[: self.max_length]
+        self.data2 = self.data2[: self.max_length]
+
+        self.stream = None
+        self.playing = False
+        self.playback_position = 0
+
+    def _audio_callback(self, outdata, frames, time, status):
+        if status:
+            print(status)
+
+        end = self.playback_position + frames
+
+        chunk1 = self.data1[self.playback_position : end]
+        chunk2 = self.data2[self.playback_position : end]
+
+        if self.mute1:
+            chunk1 *= 0
+        if self.mute2:
+            chunk2 *= 0
+
+        mixed_chunk = chunk1 + chunk2
+        outdata[: len(mixed_chunk)] = mixed_chunk
+
+        if len(mixed_chunk) < len(outdata):
+            outdata[len(mixed_chunk) :] = 0
+
+        self.playback_position = end
+
+        if end >= self.max_length:
+            raise sd.CallbackStop()
 
     def play(self):
-        self.playback_event.set()
-        playback_thread = Thread(target=self._playback_loop)
-        playback_thread.start()
+        """
+        start playing both audio files simultaneously
+        """
+        if not self.playing:
+            self.playback_position = 0
+            self.playing = True
+            self.stream = sd.OutputStream(
+                samplerate=self.samplerate1, channels=2, callback=self._audio_callback
+            )
+            self.stream.start()
 
     def stop(self):
-        self.playback_event.clear()
+        """
+        stop playback
+        """
+        if self.stream:
+            self.stream.stop()
+            self.stream.close()
+            self.playing = False
+            self.playback_position = 0
 
-    def _playback_loop(self):
-        mixed_audio = self._mix_stems()
-        stream = sd.OutputStream(samplerate=self.sample_rate, channels=1, dtype="int16")
-        with stream:
-            stream.start()
-            while self.playback_event.is_set():
-                stream.write(mixed_audio)
+    def toggle_mute1(self):
+        """
+        toggle mute for the first audio file
+        """
+        self.mute1 = not self.mute1
+        print(f"File 1 muted: {self.mute1}")
+
+    def toggle_mute2(self):
+        """
+        toggle mute for the second audio file
+        """
+        self.mute2 = not self.mute2
+        print(f"File 2 muted: {self.mute2}")
 
 
-# Example usage:
-if __name__ == "__main__":
-    mixer = AudioMixer()
+def main():
+
+    player = SimultaneousWAVPlayer("1.wav", "2.wav")
+    player.play()
+
     try:
-        # Load stems (replace with your file paths)
-        mixer.load_stem("stem1", "miss.wav")
-        mixer.load_stem("stem2", "yto.wav")
-
-        # Start playback
-        mixer.play()
-
-        # Mute/unmute stems dynamically
         while True:
-            cmd = input("Enter command (mute/unmute/stop): ").strip()
-            if cmd.startswith("mute "):
-                stem = cmd.split(" ")[1]
-                mixer.mute_stem(stem, mute=True)
-            elif cmd.startswith("unmute "):
-                stem = cmd.split(" ")[1]
-                mixer.mute_stem(stem, mute=False)
-            elif cmd == "stop":
-                mixer.stop()
+            cmd = input("commands: m1 (mute file 1), m2 (mute file 2), q (quit): ")
+            if cmd == "m1":
+                player.toggle_mute1()
+            elif cmd == "m2":
+                player.toggle_mute2()
+            elif cmd == "q":
                 break
-    except Exception as e:
-        print(f"Error: {e}")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        player.stop()
+
+
+if __name__ == "__main__":
+    main()
