@@ -92,4 +92,84 @@ class SimultaneousWAVPlayer:
         if not self.playing:
             self.playback_position = 0
             self.playing = True
-            sel
+            self.stream = sd.OutputStream(
+                samplerate=self.samplerate1, channels=2, callback=self._audio_callback
+            )
+            self.stream.start()
+
+    def stop(self):
+        """
+        stop playback
+        """
+        if self.stream:
+            self.stream.stop()
+            self.stream.close()
+            self.playing = False
+            self.playback_position = 0
+
+    def toggle_mute1(self):
+        """
+        toggle mute for the first audio file
+        """
+        self.mute1 = not self.mute1
+        print(f"File 1 muted: {self.mute1}")
+
+    def toggle_mute2(self):
+        """
+        toggle mute for the second audio file
+        """
+        self.mute2 = not self.mute2
+        print(f"File 2 muted: {self.mute2}")
+    def toggle_mute3(self):
+        """
+        toggle mute for the first audio file
+        """
+        self.mute3 = not self.mute3
+        print(f"File 3 muted: {self.mute1}")
+
+    def toggle_mute4(self):
+        """
+        toggle mute for the second audio file
+        """
+        self.mute4 = not self.mute4
+        print(f"File 24 muted: {self.mute4}")
+    def toggle_mute5(self):
+        """
+        toggle mute for the second audio file
+        """
+        self.mute5 = not self.mute5
+        print(f"File 2 muted: {self.mute5}")
+
+
+
+def main():
+    end = True
+    while end:
+        player = SimultaneousWAVPlayer( "SOUND ART BASS.wav", "SOUND ART GUITAR RIFF.wav","SOUND ART KEYS N PADS.wav","SOUND ART KICK N SNARE.wav", "SOUND ART LEADS.wav")
+        player.play()
+        
+        try:
+            while True:
+                cmd = input("commands: 1 (bass), 2(guitar riff), 3(keys + pads), 4(kick + snare), 5(leads), q (quit): ")
+                if cmd == "1":
+                    player.toggle_mute1()
+                elif cmd == "2":
+                    player.toggle_mute2()
+                elif cmd == "3":
+                    player.toggle_mute3()
+                elif cmd == "4":
+                    player.toggle_mute4()
+                elif cmd == "5":
+                    player.toggle_mute5()
+                elif cmd == "q":
+                    end = False
+                    break
+        except KeyboardInterrupt:
+            pass
+        finally:
+            end = False
+            player.stop()
+
+
+if __name__ == "__main__":
+    main()
