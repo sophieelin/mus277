@@ -23,14 +23,18 @@ def track_objects_in_frame(frame):
 def get_hand_heights(tracked_objects):
     hand_heights = []
     for obj in tracked_objects:
-        left_hand, right_hand = obj.get('hand_positions', (None, None))
+        left_hand, right_hand = obj.get('hand_positions', (0, 0))
         frame_height = obj.get('frame_height', 1)
         if left_hand:
             height = 1 - (left_hand[1] / frame_height)
             hand_heights.append(height)
+        else:
+            hand_heights.append(0)
         if right_hand:
             height = 1 - (right_hand[1] / frame_height)
             hand_heights.append(height)
+        else:
+            hand_heights.append(0)
     
     return hand_heights
 
@@ -46,7 +50,7 @@ def run_tracking():
         
         for obj in tracked_objects:
             keypoints = obj['keypoints']
-            left_hand, right_hand = compute_overall_hand_positions(keypoints, frame_width, frame_height)
+            left_hand, right_hand = compute_hand_positions(keypoints, frame_width, frame_height)
             obj['hand_positions'] = (left_hand, right_hand)
             obj['frame_height'] = frame_height
         
@@ -55,6 +59,19 @@ def run_tracking():
         hand_heights_queue.put(hand_heights)
         
         for obj in tracked_objects:
+            keypoints = obj['keypoints']
+            for kp_name, (x_norm, y_norm) in keypoints.items():
+                x_px = int(x_norm * frame_width)
+                y_px = int(y_norm * frame_height)
+                
+                # Draw each keypoint with a circle
+                cv2.circle(frame, (x_px, y_px), 5, (0, 255, 255), -1)
+                
+                # Label each keypoint
+                cv2.putText(frame, kp_name, (x_px + 5, y_px - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 255), 1)
+        
+        # Draw hand positions specifically (left hand: blue, right hand: red)
+        for obj in tracked_objects:
             left_hand, right_hand = obj.get('hand_positions', (None, None))
 
             if left_hand:
@@ -62,6 +79,7 @@ def run_tracking():
             if right_hand:
                 cv2.circle(frame, right_hand, 10, (0, 0, 255), -1)
 
+        # Draw bar graph for hand heights
         bar_height = 100
         bar_width = 30
         gap = 10
@@ -103,24 +121,19 @@ def extract_keypoints(result, frame_width, frame_height):
         return normalized_keypoints
     return []
 
-def compute_overall_hand_positions(keypoints, frame_width, frame_height):
-    if not keypoints:
-        return None, None
+def compute_hand_positions(keypoints, frame_width, frame_height):
+    left_hand = keypoints.get('kp_9', None)
+    right_hand = keypoints.get('kp_10', None)
 
-    points = np.array(list(keypoints.values()))
-    points = points[np.any(points != 0, axis=1)]
+    if left_hand:
+        left_hand_px = (int(left_hand[0] * frame_width), int(left_hand[1] * frame_height))
+    else:
+        left_hand_px = None
 
-    if points.size == 0:
-        return None, None
-
-    leftmost_idx = np.argmin(points[:, 0])
-    rightmost_idx = np.argmax(points[:, 0])
-
-    left_hand = points[leftmost_idx]
-    right_hand = points[rightmost_idx]
-
-    left_hand_px = (int(left_hand[0] * frame_width), int(left_hand[1] * frame_height))
-    right_hand_px = (int(right_hand[0] * frame_width), int(right_hand[1] * frame_height))
+    if right_hand:
+        right_hand_px = (int(right_hand[0] * frame_width), int(right_hand[1] * frame_height))
+    else:
+        right_hand_px = None
 
     return left_hand_px, right_hand_px
 
