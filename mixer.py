@@ -3,7 +3,6 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 
-
 class SimultaneousWAVPlayer:
     ending = False
     def __init__(self, file1, file2, file3, file4, file5):
@@ -15,9 +14,6 @@ class SimultaneousWAVPlayer:
         self.data3, self.samplerate3 = sf.read(file3)
         self.data4, self.samplerate4 = sf.read(file4)
         self.data5, self.samplerate5 = sf.read(file5)
-        #for file in list:
-        #    self.data1, self.samplerate1 = sf.read(file)
-
         if self.samplerate1 != self.samplerate2:
             raise ValueError("mismatched sample rates")
 
@@ -38,7 +34,6 @@ class SimultaneousWAVPlayer:
         if self.data5.ndim == 1:
             self.data5 = np.column_stack((self.data5, self.data5))
 
-
         self.max_length = min(len(self.data1), len(self.data2), len(self.data3), len(self.data4), len(self.data5))
         self.data1 = self.data1[: self.max_length]
         self.data2 = self.data2[: self.max_length]
@@ -49,18 +44,18 @@ class SimultaneousWAVPlayer:
         self.stream = None
         self.playing = False
         self.playback_position = 0
+        self.volumes = [1.0, 1.0, 1.0, 1.0, 1.0]
 
     def _audio_callback(self, outdata, frames, time, status):
         if status:
             print(status)
 
         end = self.playback_position + frames
-
-        chunk1 = self.data1[self.playback_position : end]
-        chunk2 = self.data2[self.playback_position : end]
-        chunk3 = self.data3[self.playback_position : end]
-        chunk4 = self.data4[self.playback_position : end]
-        chunk5 = self.data5[self.playback_position : end]
+        chunk1 = self.data1[self.playback_position : end] * self.volumes[0]
+        chunk2 = self.data2[self.playback_position : end] * self.volumes[1]
+        chunk3 = self.data3[self.playback_position : end] * self.volumes[2]
+        chunk4 = self.data4[self.playback_position : end] * self.volumes[3]
+        chunk5 = self.data5[self.playback_position : end] * self.volumes[4]
 
         if self.mute1:
             chunk1 *= 0
@@ -120,6 +115,7 @@ class SimultaneousWAVPlayer:
         """
         self.mute2 = not self.mute2
         print(f"File 2 muted: {self.mute2}")
+
     def toggle_mute3(self):
         """
         toggle mute for the first audio file
@@ -133,43 +129,13 @@ class SimultaneousWAVPlayer:
         """
         self.mute4 = not self.mute4
         print(f"File 24 muted: {self.mute4}")
+
     def toggle_mute5(self):
         """
         toggle mute for the second audio file
         """
         self.mute5 = not self.mute5
         print(f"File 2 muted: {self.mute5}")
-
-
-
-def main():
-    end = True
-    while end:
-        player = SimultaneousWAVPlayer( "SOUND ART BASS.wav", "SOUND ART GUITAR RIFF.wav","SOUND ART KEYS N PADS.wav","SOUND ART KICK N SNARE.wav", "SOUND ART LEADS.wav")
-        player.play()
-        
-        try:
-            while True:
-                cmd = input("commands: 1 (bass), 2(guitar riff), 3(keys + pads), 4(kick + snare), 5(leads), q (quit): ")
-                if cmd == "1":
-                    player.toggle_mute1()
-                elif cmd == "2":
-                    player.toggle_mute2()
-                elif cmd == "3":
-                    player.toggle_mute3()
-                elif cmd == "4":
-                    player.toggle_mute4()
-                elif cmd == "5":
-                    player.toggle_mute5()
-                elif cmd == "q":
-                    end = False
-                    break
-        except KeyboardInterrupt:
-            pass
-        finally:
-            end = False
-            player.stop()
-
-
-if __name__ == "__main__":
-    main()
+    def set_volumes(self, hand_heights):
+        for i in range(min(len(hand_heights), 5)):
+            self.volumes[i] = hand_heights[i]
